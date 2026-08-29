@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>HOLD ON - 長押しガマンゲーム</title>
+<style>
+  :root{
+    --bg1:#0f1226; --bg2:#1b2148; --ink:#eaf0ff; --sub:#9aa6d4;
+    --accent:#5df2c4; --accent2:#ffd24d; --bad:#ff6b8b; --panel:rgba(12,16,38,.78);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none; user-select:none;}
+  html,body{height:100%}
+  body{
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+    background:radial-gradient(120% 90% at 50% 0%, var(--bg2), var(--bg1) 70%);
+    color:var(--ink); overflow:hidden; touch-action:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #wrap{position:relative; width:100vw; height:100dvh; max-width:520px; max-height:920px;
+    overflow:hidden;}
+  .screen{position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:20px; padding:26px; text-align:center;
+    transition:opacity .25s; }
+  .hidden{opacity:0; pointer-events:none;}
+
+  h1{font-size:clamp(40px,15vw,72px); letter-spacing:.08em; line-height:1;
+    text-shadow:0 0 24px rgba(93,242,196,.5), 0 4px 0 #14324a;}
+  h1 small{display:block; font-size:.24em; letter-spacing:.5em; color:var(--accent2);
+    margin-top:14px; text-shadow:none;}
+  p.lead{font-size:13.5px; line-height:2; color:var(--sub); max-width:330px;}
+  .lead b{color:var(--ink)}
+
+  .btn{
+    border:none; cursor:pointer; font:800 19px/1 inherit; color:#06231b;
+    background:linear-gradient(180deg,#9dffdf,#3fe3b4);
+    padding:16px 46px; border-radius:999px;
+    box-shadow:0 8px 0 #1f8f70, 0 14px 30px rgba(0,0,0,.4);
+    transition:transform .08s, box-shadow .08s;
+  }
+  .btn:active{transform:translateY(5px); box-shadow:0 3px 0 #1f8f70, 0 6px 14px rgba(0,0,0,.4);}
+
+  /* --- game screen --- */
+  .round-tag{font-size:12px; letter-spacing:.35em; color:var(--sub);}
+  .target{font-size:15px; color:var(--sub); line-height:1.7;}
+  .target b{display:block; font-size:44px; color:var(--accent2); letter-spacing:.02em;
+    text-shadow:0 0 20px rgba(255,210,77,.4); margin-top:2px;}
+  .pad{
+    position:relative; width:min(64vw,240px); aspect-ratio:1; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 40%, #2b356e, #171d40);
+    box-shadow:inset 0 0 0 2px rgba(255,255,255,.08), 0 10px 40px rgba(0,0,0,.45);
+    font-size:17px; font-weight:800; letter-spacing:.15em; color:var(--sub);
+    cursor:pointer; transition:transform .12s ease, box-shadow .12s;
+  }
+  .pad.holding{
+    transform:scale(.94);
+    color:var(--accent);
+    box-shadow:inset 0 0 0 2px var(--accent), 0 0 60px rgba(93,242,196,.45);
+    background:radial-gradient(circle at 50% 40%, #33608a, #12324a);
+  }
+  .pad .ripple{position:absolute; inset:0; border-radius:50%; border:2px solid var(--accent);
+    opacity:0; pointer-events:none;}
+  .pad.holding .ripple{animation:rip 1.6s ease-out infinite;}
+  @keyframes rip{0%{transform:scale(.7); opacity:.7} 100%{transform:scale(1.25); opacity:0}}
+  .hint{font-size:12px; color:var(--sub); min-height:1.4em; letter-spacing:.05em;}
+
+  /* --- round flash --- */
+  .flash{
+    position:absolute; inset:0; background:var(--panel); backdrop-filter:blur(3px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    opacity:0; pointer-events:none; transition:opacity .18s;
+  }
+  .flash.show{opacity:1;}
+  .flash .verdict{font-size:34px; font-weight:800; letter-spacing:.06em;}
+  .flash .detail{font-size:14px; color:var(--sub); line-height:1.9;}
+  .flash .detail em{font-style:normal; color:var(--ink); font-weight:700;}
+
+  /* --- final --- */
+  .rank{font-size:clamp(30px,10vw,46px); font-weight:800; letter-spacing:.05em;
+    color:var(--accent); text-shadow:0 0 24px rgba(93,242,196,.4);}
+  .score-big{font-size:15px; color:var(--sub);}
+  .score-big b{display:block; font-size:40px; color:var(--ink); margin-top:2px;}
+  .breakdown{display:flex; gap:6px; flex-wrap:wrap; justify-content:center; max-width:320px;}
+  .chip{font-size:12px; padding:5px 10px; border-radius:999px; background:rgba(255,255,255,.06);
+    color:var(--sub);}
+  .chip b{color:var(--ink)}
+  .best{font-size:12px; color:var(--accent2); letter-spacing:.1em;}
+  .ver{position:absolute; bottom:10px; left:0; right:0; text-align:center;
+    font-size:10px; color:rgba(154,166,212,.5); letter-spacing:.2em;}
+</style>
+</head>
+<body>
+<div id="wrap">
+
+  <section class="screen" id="title">
+    <h1>HOLD ON<small>長押しガマン</small></h1>
+    <p class="lead">
+      表示された秒数だけ、ボタンを<b>長押し</b>して離すだけ。<br>
+      ただし押してる間、<b>時間は表示されません</b>。<br>
+      たよれるのは体内時計だけ。<b>全5回</b>のズレ合計で称号が決まります。
+    </p>
+    <button class="btn" id="startBtn">スタート</button>
+    <p class="lead">PC: スペースキー長押しでもOK</p>
+    <p class="best" id="titleBest"></p>
+  </section>
+
+  <section class="screen hidden" id="game">
+    <div class="round-tag" id="roundTag">ROUND 1 / 5</div>
+    <div class="target">この秒数をキープして離す<b id="targetNum">2.00秒</b></div>
+    <div class="pad" id="pad"><span class="ripple"></span><span id="padLabel">長 押 し</span></div>
+    <div class="hint" id="hint">準備ができたら押しっぱなし</div>
+    <div class="flash" id="flash">
+      <div class="verdict" id="verdict"></div>
+      <div class="detail" id="detail"></div>
+    </div>
+  </section>
+
+  <section class="screen hidden" id="final">
+    <div class="rank" id="rankText">—</div>
+    <div class="score-big">ズレ合計<b id="totalDiff">0.00秒</b></div>
+    <div class="breakdown" id="breakdown"></div>
+    <div class="best" id="finalBest"></div>
+    <button class="btn" id="retryBtn">もう一度</button>
+  </section>
+
+  <div class="ver" id="verTag"></div>
+</div>
+
+<script>
+const VERSION = "1.0.0";
+/* CHANGELOG
+ 1.0.0 (2026-08-29) 初版。全5ラウンドの長押しガマンゲーム。体内時計でズレ合計を競い、7段階の称号判定。ベストはlocalStorage保存。
+*/
+
+const $ = s => document.querySelector(s);
+const BEST_KEY = "holdon_best_v1";
+
+const ROUNDS = 5;
+let targets = [];
+let idx = 0;
+let diffs = [];        // ms 絶対値
+let signed = [];       // ms 符号付き
+let holdStart = 0;
+let holding = false;
+let locked = false;    // フラッシュ表示中の入力ロック
+
+const RANKS = [
+  { max: 250,   name: "時の支配者",       note: "体内にセシウム原子時計" },
+  { max: 500,   name: "体内時計マスター",  note: "腕時計いらないでしょ" },
+  { max: 900,   name: "なかなかの精度",    note: "だいたい合ってる、が信条" },
+  { max: 1500,  name: "そこそこ人間",      note: "3秒は3秒くらい" },
+  { max: 2500,  name: "おおらか",         note: "時間は概念だからね" },
+  { max: 4000,  name: "気合で生きてる",    note: "感覚がすべて" },
+  { max: Infinity, name: "時空のはぐれ者", note: "秒とは……？" },
+];
+
+function randTarget(){
+  // 1.20 〜 5.80 秒、0.05刻み
+  const v = 1.2 + Math.random() * 4.6;
+  return Math.round(v * 20) / 20;
+}
+function fmt(sec){ return sec.toFixed(2) + "秒"; }
+
+function loadBest(){
+  const v = Number(localStorage.getItem(BEST_KEY));
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+function showTitleBest(){
+  const b = loadBest();
+  $("#titleBest").textContent = b ? `ベスト: ズレ合計 ${(b/1000).toFixed(2)}秒` : "";
+}
+
+function startGame(){
+  targets = Array.from({length: ROUNDS}, randTarget);
+  idx = 0; diffs = []; signed = [];
+  $("#title").classList.add("hidden");
+  $("#final").classList.add("hidden");
+  $("#game").classList.remove("hidden");
+  nextRound();
+}
+
+function nextRound(){
+  locked = false; holding = false;
+  $("#roundTag").textContent = `ROUND ${idx + 1} / ${ROUNDS}`;
+  $("#targetNum").textContent = fmt(targets[idx]);
+  $("#hint").textContent = "準備ができたら押しっぱなし";
+  $("#padLabel").textContent = "長 押 し";
+  $("#pad").classList.remove("holding");
+  $("#flash").classList.remove("show");
+}
+
+function beginHold(){
+  if (locked || holding) return;
+  holding = true;
+  holdStart = performance.now();
+  $("#pad").classList.add("holding");
+  $("#padLabel").textContent = "キープ…";
+  $("#hint").textContent = "ちょうどで指を離す";
+}
+
+function endHold(){
+  if (!holding) return;
+  holding = false;
+  const elapsed = performance.now() - holdStart;
+  $("#pad").classList.remove("holding");
+  $("#padLabel").textContent = "長 押 し";
+
+  const target = targets[idx] * 1000;
+  const d = elapsed - target;          // 符号付き
+  const ad = Math.abs(d);
+  diffs.push(ad); signed.push(d);
+
+  let verdict, color;
+  if (ad < 50)      { verdict = "PERFECT!"; color = "var(--accent)"; }
+  else if (ad < 150){ verdict = "すごい";   color = "var(--accent)"; }
+  else if (ad < 400){ verdict = "おしい";   color = "var(--accent2)"; }
+  else if (ad < 900){ verdict = "うーん";   color = "var(--accent2)"; }
+  else              { verdict = "ズレすぎ"; color = "var(--bad)"; }
+
+  const arrow = d > 0 ? "長かった" : "短かった";
+  $("#verdict").textContent = verdict;
+  $("#verdict").style.color = color;
+  $("#detail").innerHTML =
+    `キープ <em>${(elapsed/1000).toFixed(2)}秒</em> / お題 ${(target/1000).toFixed(2)}秒<br>` +
+    `ズレ <em>${ad.toFixed(0)}ms</em>（${arrow}）`;
+  $("#flash").classList.add("show");
+  locked = true;
+
+  setTimeout(() => {
+    idx++;
+    if (idx >= ROUNDS) finish();
+    else nextRound();
+  }, 1500);
+}
+
+function finish(){
+  const total = diffs.reduce((a, b) => a + b, 0);
+  const rank = RANKS.find(r => total <= r.max);
+  $("#rankText").textContent = rank.name;
+  $("#totalDiff").textContent = (total / 1000).toFixed(2) + "秒";
+
+  $("#breakdown").innerHTML = signed.map((d, i) =>
+    `<span class="chip">R${i+1} <b>${d >= 0 ? "+" : ""}${(d/1000).toFixed(2)}</b></span>`
+  ).join("") + `<span class="chip" style="color:var(--sub)">${rank.note}</span>`;
+
+  const prev = loadBest();
+  let bestLine;
+  if (prev == null || total < prev){
+    localStorage.setItem(BEST_KEY, String(Math.round(total)));
+    bestLine = "🎉 自己ベスト更新！";
+  } else {
+    bestLine = `ベスト: ${(prev/1000).toFixed(2)}秒`;
+  }
+  $("#finalBest").textContent = bestLine;
+
+  $("#game").classList.add("hidden");
+  $("#final").classList.remove("hidden");
+  showTitleBest();
+}
+
+/* --- 入力 --- */
+const pad = $("#pad");
+pad.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  try { pad.setPointerCapture(e.pointerId); } catch (_) {}
+  beginHold();
+});
+pad.addEventListener("pointerup", e => { e.preventDefault(); endHold(); });
+pad.addEventListener("pointercancel", () => endHold());
+pad.addEventListener("contextmenu", e => e.preventDefault());
+
+document.addEventListener("keydown", e => {
+  if (e.code === "Space" && !$("#game").classList.contains("hidden")){
+    e.preventDefault(); beginHold();
+  }
+});
+document.addEventListener("keyup", e => {
+  if (e.code === "Space" && !$("#game").classList.contains("hidden")){
+    e.preventDefault(); endHold();
+  }
+});
+
+$("#startBtn").addEventListener("click", startGame);
+$("#retryBtn").addEventListener("click", startGame);
+
+$("#verTag").textContent = "v" + VERSION;
+showTitleBest();
+</script>
+</body>
+</html>
