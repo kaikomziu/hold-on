@@ -191,10 +191,11 @@
 </div>
 
 <script>
-const VERSION = "1.1.0";
+const VERSION = "1.1.1";
 /* CHANGELOG
  1.0.0 (2026-08-29) 初版。全5ラウンドの長押しガマンゲーム。体内時計でズレ合計を競い、7段階の称号判定。ベストはlocalStorage保存。
  1.1.0 (2026-08-29) Supabaseで世界ランキングを実装。?test を付けたURLでは記録が送信されないテストモードになる。
+ 1.1.1 (2026-08-29) 共通オリジンで他ゲームのSupabaseログインを拾い登録がRLSで弾かれる不具合を修正(anon固定 + ポリシーを全ロール許可)。
 */
 
 const $ = s => document.querySelector(s);
@@ -216,7 +217,13 @@ const HoldonRanking = (() => {
   function sb(){
     if (client) return client;
     if (!window.supabase || !window.supabase.createClient) return null;
-    client = window.supabase.createClient(SUPABASE_URL, KEY);
+    // kaikomziu.github.io は全ゲーム共通オリジン = localStorage 共有。
+    // 他ゲーム(mecha-chameleon等)のSupabaseログインセッションを拾って
+    // authenticatedロールで送信してしまわないよう、認証状態を一切持たせない。
+    client = window.supabase.createClient(SUPABASE_URL, KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { headers: { Authorization: "Bearer " + KEY } },
+    });
     return client;
   }
 

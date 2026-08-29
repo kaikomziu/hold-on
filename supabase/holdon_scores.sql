@@ -22,15 +22,16 @@ drop policy if exists "holdon_scores_public_read" on public.holdon_scores;
 drop policy if exists "holdon_scores_public_insert" on public.holdon_scores;
 
 -- 誰でも閲覧可能(世界ランキング表示のため)
+-- ※ ロールを anon に限定しない。kaikomziu.github.io は全ゲーム共通オリジンで、
+--   同プロジェクトを使う mecha-chameleon にログイン中だと supabase-js が
+--   authenticated ロールのJWTを送るため、to anon だとINSERTがRLSで弾かれる。
 create policy "holdon_scores_public_read"
   on public.holdon_scores for select
-  to anon
   using (true);
 
 -- 誰でも登録可能(妥当性はCHECK制約で担保、更新・削除は不可)
 create policy "holdon_scores_public_insert"
   on public.holdon_scores for insert
-  to anon
   with check (true);
 
 -- 上位取得を速くするためのインデックス
